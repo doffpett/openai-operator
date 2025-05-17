@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <title>Flaggtider 17. mai</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    #warning { color: red; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Flaggtider</h1>
+  <div id="info">Laster&hellip;</div>
+  <div id="warning"></div>
+  <script>
+    async function getLocation() {
+      return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({lat: pos.coords.latitude, lon: pos.coords.longitude}),
+          () => resolve({lat: 59.9139, lon: 10.7522}) // Oslo som fallback
+        );
+      });
+    }
+
+    function todayISODate() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    async function fetchSunTimes(lat, lon) {
+      const url = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&date=${todayISODate()}&formatted=0`;
+      const res = await fetch(url);
+      const data = await res.json();
+      return {sunrise: data.results.sunrise, sunset: data.results.sunset};
+    }
+
+    async function fetchWeather(lat, lon) {
+      const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
+      const res = await fetch(url, {headers: {'User-Agent': 'Flag App'}});
+      const data = await res.json();
+      return data.properties.timeseries[0].data.next_1_hours.summary.symbol_code;
+    }
+
+    function parseTime(t) {
+      const d = new Date();
+      const [h,m] = t.split(':');
+      d.setHours(parseInt(h,10));
+      d.setMinutes(parseInt(m,10));
+      d.setSeconds(0);
+      d.setMilliseconds(0);
+      return d;
+    }
+
+    function format(d) {
+      return d.toLocaleTimeString('no-NO', {hour:'2-digit', minute:'2-digit'});
+    }
+
+    async function main() {
+      const {lat, lon} = await getLocation();
+      const weatherCode = await fetchWeather(lat, lon).catch(()=>null);
+      const sun = await fetchSunTimes(lat, lon);
+      const sunrise = new Date(sun.sunrise);
+      const sunset = new Date(sun.sunset);
+      const raiseAt = new Date(sunrise);
+      const lowerAt = new Date(sunset);
+
+      const eight = parseTime('08:00');
+      const ninePm = parseTime('21:00');
+      if (raiseAt < eight) raiseAt.setTime(eight.getTime());
+      if (lowerAt > ninePm) lowerAt.setTime(ninePm.getTime());
+
+      document.getElementById('info').innerHTML =
+        `Soloppgang: ${format(sunrise)}<br>`+
+        `Solnedgang: ${format(sunset)}<br>`+
+        `Heis flagget: ${format(raiseAt)}<br>`+
+        `Fire flagget: ${format(lowerAt)}`;
+
+      if (weatherCode && weatherCode.includes('storm')) {
+        document.getElementById('warning').textContent = 'Flagg bør ikke heises i dag – meldt sterk vind';
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>
